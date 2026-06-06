@@ -1,4 +1,4 @@
-# Daylight Microservice -- Stories 1 and 2.
+# Daylight Microservice -- Stories 1, 2, and 3.
 #
 # Listens on tcp://*:5555 for ZeroMQ REQ/REP requests.
 #
@@ -43,13 +43,19 @@ def compute_one_day(lat, lon, date_obj):
 # Validate that lat, lon, date_str are the right types and that the date
 # string parses. Returns the parsed date object on success.
 def validate_common(lat, lon, date_str):
-    if not isinstance(lat, (int, float)):
+    if not isinstance(lat, (int, float)) or isinstance(lat, bool):
         raise ValueError("latitude must be a number")
-    if not isinstance(lon, (int, float)):
+    if not isinstance(lon, (int, float)) or isinstance(lon, bool):
         raise ValueError("longitude must be a number")
     if not isinstance(date_str, str):
         raise ValueError("date must be a string in YYYY-MM-DD format")
     return datetime.strptime(date_str, "%Y-%m-%d").date()
+
+
+# Validate that num_days is an integer (not a float, string, bool, etc.).
+def validate_num_days(num_days):
+    if isinstance(num_days, bool) or not isinstance(num_days, int):
+        raise ValueError("num_days must be an integer")
 
 
 # Build the response for a single-day lookup.
@@ -66,6 +72,7 @@ def compute_single_day(lat, lon, date_str):
 # Build the response for a date-range lookup.
 def compute_date_range(lat, lon, date_str, num_days):
     start_date = validate_common(lat, lon, date_str)
+    validate_num_days(num_days)
 
     days = []
     for offset in range(num_days):
@@ -78,15 +85,19 @@ def compute_date_range(lat, lon, date_str, num_days):
         "start_date": start_date.strftime("%Y-%m-%d"),
         "num_days": num_days,
         "days": days,
-    }
+    } 
 
 
 # Parse one JSON request and produce one JSON response.
+# Story 3: never crash. Any failure -> JSON error response, service keeps running.
 def handle_request(raw_request):
     try:
         req = json.loads(raw_request)
     except json.JSONDecodeError:
         return json.dumps({"error": "request was not valid JSON"})
+
+    if not isinstance(req, dict):
+        return json.dumps({"error": "request must be a JSON object"})
 
     action = req.get("action")
     lat = req.get("latitude")
@@ -117,6 +128,9 @@ def handle_request(raw_request):
             result = compute_date_range(lat, lon, date_str, num_days)
     except ValueError as e:
         return json.dumps({"error": str(e)})
+    except Exception as e:
+        # Catch-all so the service never dies from unexpected library errors.
+        return json.dumps({"error": f"internal error: {type(e).__name__}: {e}"})
 
     return json.dumps(result)
 
@@ -127,8 +141,6 @@ def main():
     socket = context.socket(zmq.REP)
     socket.bind(f"tcp://*:{PORT}")
     print(f"[daylight] Listening on tcp://*:{PORT}")
-    print("[daylight] Supported actions: get_day, get_range")
-    print("[daylight] Press Ctrl-C to stop.")
 
     try:
         while True:

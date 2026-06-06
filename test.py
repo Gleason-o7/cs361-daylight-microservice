@@ -1,18 +1,3 @@
-# Test client for Story 3 -- handle invalid input gracefully.
-#
-# Sends a series of malformed/invalid requests to the daylight microservice
-# and verifies that each one:
-#   1. Returns a JSON object with an "error" field
-#   2. Does not crash the service
-#
-# A final "sanity" request proves the service is still running after all
-# the bad input.
-#
-# Start the microservice first in another terminal:
-#     python3 daylight_service.py
-#
-# Then run this in a second terminal:
-#     python3 test_story3.py
 
 import json
 import zmq
@@ -21,10 +6,6 @@ import zmq
 PORT = 5555
 
 
-# Send one request, print the round-trip, and check the expected outcome.
-# expectation can be:
-#   "error"  -- response must contain an "error" field
-#   "ok"     -- response must contain a "sunrise" field (happy path)
 def call(label, raw_payload, expectation):
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
